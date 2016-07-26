@@ -1,0 +1,82 @@
+<html>
+  <head>
+    <title>地圖產生器 (實驗版) </title>
+  </head>
+  <body>
+    <h1 id='title'></h1>
+    <svg width="800px" height="600px" viewBox="0 0 800 600"></svg>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.1.1/d3.min.js"></script>
+    <script src="https://d3js.org/d3-geo.v1.min.js"></script>
+
+    <script type="text/javascript" src="http://d3js.org/topojson.v1.min.js"></script>
+
+    <script>
+
+      function S_GET(id){
+          var a = new RegExp(id+"=([^&#=]*)");
+          var exec = a.exec(window.location.search);
+          return exec && decodeURIComponent(exec[1]);
+      }
+
+
+      var cellsAPI = function(sid,callback){
+       d3.json("https://spreadsheets.google.com/feeds/cells/"+sid+"/od6/public/values?alt=json",function(json){
+          console.log(json);
+          var entries = json.feed.entry;
+          var lines = entries.reduce(function(now,cell){
+            var row = parseInt(cell.gs$cell.row,10);
+            var col = parseInt(cell.gs$cell.col,10);
+
+            now[row] = now[row] || [];
+            now[row][col] = cell.gs$cell.$t;
+            return now;
+          },[]);
+          callback(lines);
+          });
+          
+      };
+
+      var getAreaNumbers = function(sid,callback){
+        cellsAPI(sid,function(lines){
+          var result = {};
+          for(var i = 3 ; i < lines.length;++i){
+            if(lines[i][1]){
+              lines[i][1] = lines[i][1].replace("台","臺");
+              result[lines[i][1]] = result[lines[i][1]] || {};
+              result[lines[i][1]][lines[i][2]] = lines[i][3];
+            }
+          }
+          callback(lines[1][2],result);
+        });
+      }
+      
+
+      d3.json("county.json", function(topodata) {
+        getAreaNumbers(
+          (S_GET("id") || "1Rb_1jtl1EWzxG6andnXYFAEntA8ivm_rJ9QrdJM7FQo"),function(title,valueMap){
+          document.getElementById("title").innerHTML = (title);
+          var features = topojson.feature(topodata, topodata.objects["Town_MOI_1041215"]).features;
+          features = features.map(function(f){
+            if(valueMap[f.properties.C_Name]){
+              f.value =  valueMap[f.properties.C_Name][f.properties.T_Name] || 0;
+            }else{
+              f.value = 0;
+            }
+            return f;
+          });
+          var path = d3.geoPath().projection( // 路徑產生器
+            d3.geoMercator().center([121.5902,25.10112  ]).scale(80000) // 座標變換函式
+          );
+
+          var color = d3.scaleLinear().domain([0,100]).range(["#090","#f00"]);
+          d3.select("svg").selectAll("path").data(features)
+            .enter().append("path").attr("d",path).attr("fill",function(d) {
+              return color(d.value);
+            });
+          
+        });
+
+      });
+    </script>
+  </body>
+</html>
